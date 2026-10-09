@@ -11,12 +11,22 @@ export interface PublishConfig {
   siteKey: string;
   captchaMode: "live" | "test" | "misconfigured";
   storage: "redis" | "memory";
+  /** Resend is configured, so authors can get a private edit link by email. */
+  emailEnabled: boolean;
 }
 
 const AUTHOR_MAX = 40;
 const NOTES_MAX = 400;
+const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:".]{2,}$/;
 
-type Field = "title" | "author" | "notes" | "layout" | "captcha";
+type Field = "title" | "author" | "notes" | "layout" | "captcha" | "email";
+
+interface Published {
+  id: string;
+  url: string;
+  email?: "sent" | "failed";
+  editUrl?: string;
+}
 
 export default function PublishDialog({
   open,
@@ -39,11 +49,12 @@ export default function PublishDialog({
   const captcha = useRef<TurnstileHandle>(null);
   const [author, setAuthor] = useState("");
   const [notes, setNotes] = useState("");
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; field?: Field; details?: string[] } | null>(null);
-  const [published, setPublished] = useState<{ id: string; url: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [published, setPublished] = useState<Published | null>(null);
+  const [copied, setCopied] = useState<"page" | "edit" | null>(null);
 
   useEffect(() => {
     const d = dialog.current;
@@ -51,7 +62,7 @@ export default function PublishDialog({
     if (open && !d.open) {
       setError(null);
       setPublished(null);
-      setCopied(false);
+      setCopied(null);
       setToken(null);
       d.showModal();
     }
@@ -61,8 +72,10 @@ export default function PublishDialog({
   const titleCheck = checkTitle(title);
   const authorCheck = checkFreeText(author, "Your name", AUTHOR_MAX);
   const notesCheck = checkFreeText(notes, "Notes", NOTES_MAX);
+  const emailTrimmed = email.trim();
+  const emailOk = emailTrimmed === "" || (emailTrimmed.length <= 254 && EMAIL_RE.test(emailTrimmed));
   const layoutBlocked = !analysis.canPublish;
-  const formOk = titleCheck.ok && authorCheck.ok && notesCheck.ok && !layoutBlocked;
+  const formOk = titleCheck.ok && authorCheck.ok && notesCheck.ok && emailOk && !layoutBlocked;
 
   async function publish(e: React.FormEvent) {
     e.preventDefault();
@@ -73,11 +86,19 @@ export default function PublishDialog({
       const res = await fetch("/api/scenarios", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, author, notes, layout, captchaToken: token }),
+        body: JSON.stringify({
+          title,
+          author,
+          notes,
+          layout,
+          captchaToken: token,
+          ...(config.emailEnabled && emailTrimmed ? { email: emailTrimmed } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({ ok: false, error: `The server answered ${res.status}.` }));
       if (data.ok) {
-        setPublished({ id: data.id, url: data.url });
+        setPublished({ id: data.id, url: data.url, email: data.email, editUrl: data.editUrl });
+        setEmail(""); // the address isn't needed any more, so don't keep it around
       } else {
         setError({ message: data.error ?? "Publishing failed.", field: data.field, details: data.details });
         captcha.current?.reset();
@@ -90,12 +111,13 @@ export default function PublishDialog({
     }
   }
 
-  async function copyLink() {
+  async function copy(which: "page" | "edit") {
     if (!published) return;
-    const url = `${window.location.origin}${published.url}`;
+    const url = which === "page" ? `${window.location.origin}${published.url}` : published.editUrl;
+    if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      setCopied(which);
     } catch {
       window.prompt("Copy this link:", url);
     }
@@ -109,12 +131,32 @@ export default function PublishDialog({
           <p>
             <strong>{title}</strong> is in the gallery. Anyone with the link can open it, print the card, or remix it.
           </p>
+          {published.email === "sent" && (
+            <p className="notice notice--ok">
+              We emailed you a private edit link. Keep that email: it&apos;s the only way to change or delete this scenario,
+              and we didn&apos;t store your address.
+            </p>
+          )}
+          {published.email === "failed" && published.editUrl && (
+            <div className="notice notice--error" role="alert">
+              <p>
+                The email couldn&apos;t be sent, so here is your private edit link instead. Save it now: it won&apos;t be shown
+                again.
+              </p>
+              <p className="edit-link">
+                <code>{published.editUrl}</code>
+              </p>
+              <button type="button" className="btn" onClick={() => copy("edit")}>
+                {copied === "edit" ? "Edit link copied" : "Copy edit link"}
+              </button>
+            </div>
+          )}
           {config.storage === "memory" && (
             <p className="notice">This site has no database connected yet, so the scenario disappears when the server restarts.</p>
           )}
           <div className="dialog-actions">
-            <button type="button" className="btn" onClick={copyLink}>
-              {copied ? "Link copied" : "Copy link"}
+            <button type="button" className="btn" onClick={() => copy("page")}>
+              {copied === "page" ? "Link copied" : "Copy link"}
             </button>
             <Link className="btn btn--primary" href={published.url}>
               Open scenario page
@@ -181,6 +223,27 @@ export default function PublishDialog({
               {notesCheck.ok ? `${notes.trim().length}/${NOTES_MAX}` : notesCheck.message}
             </small>
           </label>
+
+          {config.emailEnabled && (
+            <label className="field">
+              <span>Email me a private edit link (optional)</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                maxLength={254}
+                autoComplete="email"
+                inputMode="email"
+                aria-invalid={!emailOk || error?.field === "email"}
+                aria-describedby="email-hint"
+              />
+              <small id="email-hint" className={emailOk ? "field-hint" : "field-error"}>
+                {emailOk
+                  ? "We send the link once and don't store your address. Without it, you can't edit or delete the scenario later."
+                  : "That email address doesn't look right."}
+              </small>
+            </label>
+          )}
 
           {config.captchaMode === "test" && (
             <p className="notice">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { analyze } from "@/lib/analysis";
 import { cellId, isOnBoard, parseCell } from "@/lib/board";
@@ -24,6 +25,7 @@ import {
 import { BASE_PIECES, EXPANSION_PIECES, MAX_STORMS, PIECE_LIMITS, TOOL_INFO, type PieceKind, type Tool } from "@/lib/tokens";
 import BoardSvg, { type BoardGhost } from "./BoardSvg";
 import CourseCheck from "./CourseCheck";
+import EditDialog from "./EditDialog";
 import LegendCard from "./LegendCard";
 import PublishDialog, { type PublishConfig } from "./PublishDialog";
 import TokenIcon from "./TokenIcon";
@@ -53,7 +55,21 @@ function hintFor(tool: Tool): string {
   }
 }
 
-export default function Editor({ config }: { config: PublishConfig }) {
+export interface EditSession {
+  id: string;
+  key: string;
+  title: string;
+  author: string;
+  notes: string;
+  layout: Layout;
+}
+
+/**
+ * The board editor. Without `edit` it designs a new scenario (drafts are kept
+ * in the browser); with `edit` it changes a published one, opened from the
+ * author's private edit link.
+ */
+export default function Editor({ config, edit }: { config: PublishConfig; edit?: EditSession }) {
   const orientation = useBoardOrientation();
   const [history, setHistory] = useState<History>({ past: [], present: emptyLayout(), future: [] });
   const layout = history.present;
@@ -108,8 +124,18 @@ export default function Editor({ config }: { config: PublishConfig }) {
     [commit, say],
   );
 
-  /* ---------- initial load: link > preset > saved draft ---------- */
+  /* ---------- initial load: published scenario > link > preset > saved draft ---------- */
   useEffect(() => {
+    if (edit) {
+      const start = dropConflicts(parseLayout(edit.layout).layout);
+      layoutRef.current = start;
+      setHistory({ past: [], present: start, future: [] });
+      setExpansion(usesExpansion(start));
+      if (start.start) setActiveCell(start.start);
+      setTitle(edit.title);
+      setReady(true);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const preset = params.get("preset");
     let start: Layout | null = null;
@@ -146,11 +172,11 @@ export default function Editor({ config }: { config: PublishConfig }) {
     }
     setTitle(startTitle);
     setReady(true);
-  }, [say]);
+  }, [say, edit]);
 
-  /* ---------- autosave ---------- */
+  /* ---------- autosave (new scenarios only; edits are saved to the server) ---------- */
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || edit) return;
     const id = window.setTimeout(() => {
       try {
         window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ layout, title }));
@@ -159,7 +185,7 @@ export default function Editor({ config }: { config: PublishConfig }) {
       }
     }, 300);
     return () => window.clearTimeout(id);
-  }, [layout, title, ready]);
+  }, [layout, title, ready, edit]);
 
   /* ---------- keyboard shortcuts ---------- */
   const tools = useMemo<Tool[]>(
@@ -349,11 +375,23 @@ export default function Editor({ config }: { config: PublishConfig }) {
     <div className="workbench">
       <div className="workbench-head">
         <div className="intro">
-          <h1>Design a scenario</h1>
-          <p>
-            Place what the box holds: up to 12 islands, 9 krakens and 2 storms, plus the Start and the three-space End. The course check
-            tells you whether a crew can make it.
-          </p>
+          {edit ? (
+            <>
+              <h1>Edit your scenario</h1>
+              <p>
+                You opened this from your private edit link. Changes go live on the{" "}
+                <Link href={`/s/${edit.id}`}>scenario page</Link> when you save them.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1>Design a scenario</h1>
+              <p>
+                Place what the box holds: up to 12 islands, 9 krakens and 2 storms, plus the Start and the three-space End. The course
+                check tells you whether a crew can make it.
+              </p>
+            </>
+          )}
         </div>
         <div className="actions" role="group" aria-label="Board actions">
           <button type="button" className="btn btn--icon" onClick={undo} disabled={!history.past.length} title="Undo (Ctrl+Z)">
@@ -389,7 +427,7 @@ export default function Editor({ config }: { config: PublishConfig }) {
             Print
           </button>
           <button type="button" className="btn btn--primary" onClick={() => setPublishOpen(true)}>
-            Publish
+            {edit ? "Save changes" : "Publish"}
           </button>
         </div>
       </div>
@@ -481,15 +519,27 @@ export default function Editor({ config }: { config: PublishConfig }) {
         <CourseCheck analysis={analysis} />
       </div>
 
-      <PublishDialog
-        open={publishOpen}
-        onClose={() => setPublishOpen(false)}
-        layout={layout}
-        title={title}
-        onTitleChange={setTitle}
-        analysis={analysis}
-        config={config}
-      />
+      {edit ? (
+        <EditDialog
+          open={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          layout={layout}
+          title={title}
+          onTitleChange={setTitle}
+          analysis={analysis}
+          edit={edit}
+        />
+      ) : (
+        <PublishDialog
+          open={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          layout={layout}
+          title={title}
+          onTitleChange={setTitle}
+          analysis={analysis}
+          config={config}
+        />
+      )}
 
       <div className="toast-region" aria-live="polite" role="status">
         {toast && (

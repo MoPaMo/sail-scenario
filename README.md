@@ -16,6 +16,7 @@ Built with Next.js 16 (App Router), React 19 and TypeScript. Ready to deploy on 
 - **Responsive.** On phones the board turns upright (start at the top) so spaces stay tappable, and the token palette becomes a bottom bar.
 - **Accessible.** The board is a keyboard grid (arrow keys move, Enter places, Delete removes), with visible focus and reduced-motion support.
 - **Publishing** with a **Cloudflare Turnstile captcha**, a multilingual **profanity filter** on the scenario name, author name and notes, rule validation on the server, and per-IP rate limiting.
+- **Private edit links:** authors can enter an email address when publishing and get a secret link for editing or deleting the scenario later. The address is used once and never stored.
 - **Gallery** and a shareable page per scenario with "Remix in the editor". Spoilers (best route, dead ends, move counts) stay hidden until a player taps **Show tips**.
 - Optional **Seafarers expansion tokens** (whirlpool, ally ship, crow's nest).
 
@@ -55,11 +56,24 @@ With no environment variables set, the app uses Cloudflare's always-pass test ca
 
    Set both or neither. With neither, the site runs on test keys and the publish dialog says so. With only one, publishing is refused with an explanation.
 
-4. Optional: set `ADMIN_TOKEN` (16+ random characters) to enable moderation deletes.
+4. **Email edit links** (optional): with a domain verified in [Resend](https://resend.com) (here `sail.mopamo.dev`), set `resend_secret` to the Resend API key (`RESEND_SECRET` and `RESEND_API_KEY` work too). The sender defaults to `Sail Scenario Workshop <noreply@sail.mopamo.dev>` (override with `EMAIL_FROM`) and links point to `SITE_URL`, else the Vercel production domain, else `https://sail.mopamo.dev`. Without a key, the email field simply doesn't appear.
 
-5. **Redeploy** so the new variables take effect. `NEXT_PUBLIC_*` values are baked in at build time.
+5. Optional: set `ADMIN_TOKEN` (16+ random characters) to enable moderation deletes.
+
+6. **Redeploy** so the new variables take effect. `NEXT_PUBLIC_*` values are baked in at build time.
 
 See `.env.example` for the full list.
+
+## Edit links and privacy
+
+When an author enters an email address while publishing:
+
+1. The server creates a random 256-bit edit key and stores only its SHA-256 hash with the scenario.
+2. It emails `https://sail.mopamo.dev/s/<id>/edit#k=<key>` through Resend, then forgets the address. It's never written to the database or the logs, and the publish dialog clears the field.
+3. The key sits in the URL fragment, so browsers never send it to the server in requests or `Referer` headers. The edit page moves it into the tab's session storage and removes it from the address bar, then checks it against the hash before opening the editor.
+4. Saving (`PATCH`) and deleting (`DELETE`) send the key as `Authorization: Bearer <key>`. The server compares hashes in constant time and rate-limits attempts per IP.
+
+Without an email address, a published scenario can't be edited by anyone except via the admin token. Because the address isn't stored, a lost link can't be re-sent. If Resend fails to deliver, the publish dialog shows the link once so the author can save it. Resend, as the email provider, keeps its own delivery log.
 
 ## Moderation
 
@@ -77,9 +91,11 @@ The id is the last part of the scenario's URL (`/s/<id>`). You can also delete k
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/scenarios?offset=0&limit=24` | newest published scenarios |
-| `POST` | `/api/scenarios` | publish: `{ title, author?, notes?, layout, captchaToken }` |
+| `POST` | `/api/scenarios` | publish: `{ title, author?, notes?, layout, captchaToken, email? }` |
 | `GET` | `/api/scenarios/:id` | one scenario |
-| `DELETE` | `/api/scenarios/:id` | remove (needs `ADMIN_TOKEN`) |
+| `PATCH` | `/api/scenarios/:id` | edit: `{ title, author?, notes?, layout }` with `Authorization: Bearer <edit key>` |
+| `DELETE` | `/api/scenarios/:id` | remove, with the edit key or `ADMIN_TOKEN` |
+| `POST` | `/api/scenarios/:id/access` | check an edit key (`Authorization: Bearer <edit key>`) |
 
 A `layout` looks like:
 
@@ -138,7 +154,8 @@ components/
   LegendCard.tsx           scenario-book card
   CourseCheck.tsx          analysis panel
   ScenarioBody.tsx         published scenario: map, card, tips behind a reveal
-  PublishDialog.tsx        publish form + Turnstile
+  PublishDialog.tsx        publish form + Turnstile + optional email
+  EditGate.tsx / EditDialog.tsx   editing via the private link
 lib/
   board.ts                 board geometry and movement
   tokens.ts                token inventory
@@ -148,6 +165,8 @@ lib/
   profanity.ts             profanity filter (engine)
   profanity-data.ts        profanity filter (word data)
   turnstile.ts             captcha verification
+  email.ts                 Resend email for edit links
+  editKey.ts               edit keys (only hashes are stored)
   store.ts                 Upstash Redis / in-memory storage
   submit.ts                publish pipeline (tested without HTTP)
 tests/                     node:test suites (npm test)

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getStore } from "@/lib/store";
+import { emailEnabled, sendWithResend, siteUrl } from "@/lib/email";
+import { clientIp } from "@/lib/http";
+import { getStore, toPublic } from "@/lib/store";
 import { handleSubmission } from "@/lib/submit";
 import { verifyTurnstile } from "@/lib/turnstile";
 
@@ -7,21 +9,15 @@ export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 16_000;
 
-function clientIp(req: NextRequest): string | null {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim() || null;
-  return req.headers.get("x-real-ip");
-}
-
 /** GET /api/scenarios?offset=0&limit=24 — newest first. */
 export async function GET(req: NextRequest) {
   const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset")) || 0);
   const limit = Math.min(48, Math.max(1, Number(req.nextUrl.searchParams.get("limit")) || 24));
   const { items, total } = await getStore().list(offset, limit);
-  return NextResponse.json({ items, total, offset, limit });
+  return NextResponse.json({ items: items.map(toPublic), total, offset, limit });
 }
 
-/** POST /api/scenarios — publish a scenario (captcha + profanity + rule checks). */
+/** POST /api/scenarios — publish a scenario (captcha + profanity + rule checks, optional edit link by email). */
 export async function POST(req: NextRequest) {
   const text = await req.text();
   if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) {
@@ -33,6 +29,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false, error: "Send the scenario as JSON." }, { status: 400 });
   }
-  const result = await handleSubmission(json, clientIp(req), { store: getStore(), verify: verifyTurnstile });
-  return NextResponse.json(result.body, { status: result.status });
+  const result = await handleSubmission(json, clientIp(req), {
+    store: getStore(),
+    verify: verifyTurnstile,
+    mailer: emailEnabled() ? sendWithResend : undefined,
+    siteUrl: siteUrl(),
+  });
+  return NextResponse.json(result.body, { status: result.status, headers: { "Cache-Control": "no-store" } });
 }

@@ -39,6 +39,7 @@ export default async function ScenarioPage({ params }: Props) {
         <h1>{rec.title}</h1>
         <p className="byline">
           {rec.author ? `By ${rec.author}` : "By an anonymous crew"}, published {formatDate(rec.createdAt)}
+          {rec.updatedAt && formatDate(rec.updatedAt) !== formatDate(rec.createdAt) ? `, edited ${formatDate(rec.updatedAt)}` : ""}
         </p>
         {rec.notes && <p className="designer-notes">{rec.notes}</p>}
       </div>

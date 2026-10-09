@@ -27,6 +27,18 @@ export interface ScenarioRecord {
   layout: Layout;
   stats: ScenarioStats;
   createdAt: string;
+  updatedAt?: string;
+  /** SHA-256 of the private edit key, if the author asked for an edit link. Never sent to clients. */
+  editKeyHash?: string;
+}
+
+export type PublicScenario = Omit<ScenarioRecord, "editKeyHash">;
+
+/** Strip private fields before a record leaves the server. */
+export function toPublic(rec: ScenarioRecord): PublicScenario {
+  const { editKeyHash: _hidden, ...pub } = rec;
+  void _hidden;
+  return pub;
 }
 
 export interface ScenarioStore {
