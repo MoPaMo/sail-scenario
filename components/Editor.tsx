@@ -82,6 +82,7 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
   const [showRoute, setShowRoute] = useState(true);
   const [toast, setToast] = useState<{ n: number; text: string } | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [editDialogMode, setEditDialogMode] = useState<"save" | "delete">("save");
   const [ready, setReady] = useState(false);
   const cellEls = useRef(new Map<string, SVGGElement>());
   const stroke = useRef<{ tool: Tool; mode: "add" | "remove" } | null>(null);
@@ -426,7 +427,26 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
           <button type="button" className="btn" onClick={() => window.print()}>
             Print
           </button>
-          <button type="button" className="btn btn--primary" onClick={() => setPublishOpen(true)}>
+          {edit && (
+            <button
+              type="button"
+              className="btn btn--danger-dark"
+              onClick={() => {
+                setEditDialogMode("delete");
+                setPublishOpen(true);
+              }}
+            >
+              Delete
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              setEditDialogMode("save");
+              setPublishOpen(true);
+            }}
+          >
             {edit ? "Save changes" : "Publish"}
           </button>
         </div>
@@ -528,6 +548,7 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
           onTitleChange={setTitle}
           analysis={analysis}
           edit={edit}
+          mode={editDialogMode}
         />
       ) : (
         <PublishDialog

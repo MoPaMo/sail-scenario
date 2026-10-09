@@ -7,7 +7,18 @@ import { OFFICIAL_SCENARIOS } from "@/lib/official";
 import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Gallery" };
+export const metadata: Metadata = {
+  title: "Gallery",
+  description: "Custom Sail scenarios published by players, plus the six from the box to remix.",
+  openGraph: {
+    type: "website",
+    siteName: "Sail Scenario Workshop",
+    title: "Gallery – Sail Scenario Workshop",
+    description: "Custom Sail scenarios published by players, plus the six from the box to remix.",
+    url: "/gallery",
+    images: [{ url: "/og", width: 1200, height: 630, alt: "A Sail ocean board with islands, krakens and storms" }],
+  },
+};
 
 const PAGE_SIZE = 24;
 

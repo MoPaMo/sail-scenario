@@ -16,7 +16,8 @@ Built with Next.js 16 (App Router), React 19 and TypeScript. Ready to deploy on 
 - **Responsive.** On phones the board turns upright (start at the top) so spaces stay tappable, and the token palette becomes a bottom bar.
 - **Accessible.** The board is a keyboard grid (arrow keys move, Enter places, Delete removes), with visible focus and reduced-motion support.
 - **Publishing** with a **Cloudflare Turnstile captcha**, a multilingual **profanity filter** on the scenario name, author name and notes, rule validation on the server, and per-IP rate limiting.
-- **Private edit links:** authors can enter an email address when publishing and get a secret link for editing or deleting the scenario later. The address is used once and never stored.
+- **Private edit links:** authors can enter an email address when publishing and get a secret link for editing or deleting the scenario later (Delete is in the edit toolbar). The address is used once and never stored.
+- **Share previews:** every scenario gets its own 1200×630 card (title, author, token counts and the map, no spoilers) for WhatsApp, Discord, Slack, X and co.
 - **Gallery** and a shareable page per scenario with "Remix in the editor". Spoilers (best route, dead ends, move counts) stay hidden until a player taps **Show tips**.
 - Optional **Seafarers expansion tokens** (whirlpool, ally ship, crow's nest).
 
@@ -74,6 +75,17 @@ When an author enters an email address while publishing:
 4. Saving (`PATCH`) and deleting (`DELETE`) send the key as `Authorization: Bearer <key>`. The server compares hashes in constant time and rate-limits attempts per IP.
 
 Without an email address, a published scenario can't be edited by anyone except via the admin token. Because the address isn't stored, a lost link can't be re-sent. If Resend fails to deliver, the publish dialog shows the link once so the author can save it. Resend, as the email provider, keeps its own delivery log.
+
+## Share previews
+
+Links unfurl with a generated image and Open Graph / Twitter tags:
+
+- `/og/s/<id>` draws a card for one scenario: name, author, island/kraken/storm counts, length and the map, without route or dead ends. Pages link it as `/og/s/<id>?v=<last change>`, so after an edit, chat apps fetch a fresh image instead of a cached one. Deleted scenarios return 404.
+- `/og` is the card for every other page. It's rendered once at build time.
+- Both are PNGs of about 120 KB, well under the limits of WhatsApp and others. They're cached for an hour in browsers and a day on Vercel's CDN.
+- Absolute URLs come from `SITE_URL` (see above), so set it to `https://sail.mopamo.dev` in production.
+
+The images use Barlow Condensed (SIL Open Font License, `assets/fonts/`), including the latin-ext subset for letters like ł, č and ő. `outputFileTracingIncludes` in `next.config.ts` makes sure Vercel ships the font files with the image routes.
 
 ## Moderation
 
@@ -165,6 +177,7 @@ lib/
   profanity.ts             profanity filter (engine)
   profanity-data.ts        profanity filter (word data)
   turnstile.ts             captcha verification
+  boardImage.ts / shareImage.tsx   share-preview images
   email.ts                 Resend email for edit links
   editKey.ts               edit keys (only hashes are stored)
   store.ts                 Upstash Redis / in-memory storage

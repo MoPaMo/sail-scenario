@@ -5,6 +5,7 @@ import ScenarioBody from "@/components/ScenarioBody";
 import { analyze } from "@/lib/analysis";
 import { formatDate } from "@/lib/format";
 import { layoutToSearchParams } from "@/lib/scenario";
+import { scenarioMetadata } from "@/lib/share";
 import { getStore, ID_RE } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,8 @@ async function load(id: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const rec = await load((await params).id);
-  if (!rec) return { title: "Scenario not found" };
-  return {
-    title: rec.title,
-    description: `A custom Sail scenario${rec.author ? ` by ${rec.author}` : ""}: ${rec.layout.islands.length} islands, ${rec.layout.kraken.length} krakens, ${rec.layout.storms.length} storm${rec.layout.storms.length === 1 ? "" : "s"}.`,
-  };
+  if (!rec) return { title: "Scenario not found", robots: { index: false } };
+  return scenarioMetadata(rec);
 }
 
 export default async function ScenarioPage({ params }: Props) {

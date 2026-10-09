@@ -223,6 +223,15 @@ a {
   background: #ffe274;
 }
 
+.btn--danger-dark {
+  border-color: rgba(255, 138, 115, 0.55);
+  color: var(--danger);
+}
+
+.btn--danger-dark:hover {
+  background: rgba(255, 138, 115, 0.12);
+}
+
 .btn--icon {
   width: 40px;
   padding: 0;
@@ -1364,6 +1373,12 @@ dialog.publish h2 {
   white-space: pre-line;
 }
 
+.owner-hint {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1544,6 +1559,7 @@ dialog.publish h2 {
   .palette,
   .board-caption,
   .detail-actions,
+  .owner-hint,
   .course,
   .tips,
   .toast-region,

@@ -47,6 +47,7 @@ export default function ScenarioBody({
         <PrintButton />
         <CopyLinkButton path={`/s/${id}`} />
       </div>
+      <p className="owner-hint">Made this one? Open the private edit link from your email to change or delete it.</p>
 
       <div className="sheet">
         <LegendCard layout={layout} title={title} />

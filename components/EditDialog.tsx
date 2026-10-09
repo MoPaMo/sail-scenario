@@ -21,6 +21,7 @@ export default function EditDialog({
   onTitleChange,
   analysis,
   edit,
+  mode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,12 +30,14 @@ export default function EditDialog({
   onTitleChange: (t: string) => void;
   analysis: Analysis;
   edit: EditSession;
+  /** Open on the save form or straight on the delete confirmation. */
+  mode: "save" | "delete";
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [author, setAuthor] = useState(edit.author);
   const [notes, setNotes] = useState(edit.notes);
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [view, setView] = useState<"save" | "delete">(mode);
   const [error, setError] = useState<{ message: string; details?: string[] } | null>(null);
   const [done, setDone] = useState<"saved" | "deleted" | null>(null);
 
@@ -43,12 +46,12 @@ export default function EditDialog({
     if (!d) return;
     if (open && !d.open) {
       setError(null);
-      setConfirmDelete(false);
+      setView(mode);
       if (done === "saved") setDone(null);
       d.showModal();
     }
     if (!open && d.open) d.close();
-  }, [open, done]);
+  }, [open, done, mode]);
 
   const titleCheck = checkTitle(title);
   const authorCheck = checkFreeText(author, "Your name", AUTHOR_MAX);
@@ -120,6 +123,27 @@ export default function EditDialog({
             <Link className="btn btn--primary" href={`/s/${edit.id}`}>
               Open scenario page
             </Link>
+          </div>
+        </div>
+      ) : view === "delete" ? (
+        <div className="publish-done">
+          <h2 id="edit-heading">Delete this scenario?</h2>
+          <p>
+            <strong>{edit.title}</strong> disappears from the gallery for everyone, and its page and edit link stop working. This
+            can&apos;t be undone.
+          </p>
+          {error && (
+            <div className="notice notice--error" role="alert">
+              <p>{error.message}</p>
+            </div>
+          )}
+          <div className="dialog-actions">
+            <button type="button" className="btn btn--quiet" onClick={mode === "delete" ? onClose : () => setView("save")}>
+              Keep it
+            </button>
+            <button type="button" className="btn btn--danger" onClick={() => send("DELETE")} disabled={busy !== null}>
+              {busy === "delete" ? "Deleting…" : "Delete for good"}
+            </button>
           </div>
         </div>
       ) : (
@@ -194,23 +218,9 @@ export default function EditDialog({
           </div>
 
           <div className="danger-zone">
-            {confirmDelete ? (
-              <>
-                <p>Delete this scenario for everyone? This can&apos;t be undone.</p>
-                <div className="dialog-actions dialog-actions--start">
-                  <button type="button" className="btn btn--danger" onClick={() => send("DELETE")} disabled={busy !== null}>
-                    {busy === "delete" ? "Deleting…" : "Delete for good"}
-                  </button>
-                  <button type="button" className="btn btn--quiet" onClick={() => setConfirmDelete(false)}>
-                    Keep it
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button type="button" className="btn btn--quiet btn--danger-text" onClick={() => setConfirmDelete(true)}>
-                Delete scenario…
-              </button>
-            )}
+            <button type="button" className="btn btn--quiet btn--danger-text" onClick={() => setView("delete")}>
+              Delete scenario…
+            </button>
           </div>
         </form>
       )}

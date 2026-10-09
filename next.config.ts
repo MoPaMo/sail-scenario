@@ -9,6 +9,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Share images read their fonts from disk at runtime; make sure Vercel ships them.
+  outputFileTracingIncludes: {
+    "/og": ["./assets/fonts/**/*"],
+    "/og/s/[id]": ["./assets/fonts/**/*"],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
