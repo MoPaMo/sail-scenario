@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import BoardViewer from "@/components/BoardViewer";
-import CourseCheck from "@/components/CourseCheck";
-import LegendCard from "@/components/LegendCard";
-import { CopyLinkButton, PrintButton } from "@/components/ShareButtons";
+import ScenarioBody from "@/components/ScenarioBody";
 import { analyze } from "@/lib/analysis";
 import { formatDate } from "@/lib/format";
 import { layoutToSearchParams } from "@/lib/scenario";
@@ -24,16 +21,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!rec) return { title: "Scenario not found" };
   return {
     title: rec.title,
-    description: `A custom Sail scenario${rec.author ? ` by ${rec.author}` : ""}: ${rec.stats.columns} columns, ${rec.layout.islands.length} islands, ${rec.layout.kraken.length} krakens.`,
+    description: `A custom Sail scenario${rec.author ? ` by ${rec.author}` : ""}: ${rec.layout.islands.length} islands, ${rec.layout.kraken.length} krakens, ${rec.layout.storms.length} storm${rec.layout.storms.length === 1 ? "" : "s"}.`,
   };
 }
 
 export default async function ScenarioPage({ params }: Props) {
   const rec = await load((await params).id);
   if (!rec) notFound();
-  const analysis = analyze(rec.layout);
   const remixTitle = `${rec.title} remix`.slice(0, 60);
-  const editorHref = `/?${layoutToSearchParams(rec.layout, remixTitle).toString()}`;
 
   return (
     <article className="detail">
@@ -48,24 +43,13 @@ export default async function ScenarioPage({ params }: Props) {
         {rec.notes && <p className="designer-notes">{rec.notes}</p>}
       </div>
 
-      <BoardViewer
+      <ScenarioBody
+        id={rec.id}
+        title={rec.title}
         layout={rec.layout}
-        traps={analysis.traps}
-        label={`Map of ${rec.title}`}
+        analysis={analyze(rec.layout)}
+        editorHref={`/?${layoutToSearchParams(rec.layout, remixTitle).toString()}`}
       />
-
-      <div className="detail-actions">
-        <Link className="btn btn--primary" href={editorHref}>
-          Remix in the editor
-        </Link>
-        <PrintButton />
-        <CopyLinkButton path={`/s/${rec.id}`} />
-      </div>
-
-      <div className="sheet">
-        <LegendCard layout={rec.layout} title={rec.title} />
-        <CourseCheck analysis={analysis} />
-      </div>
     </article>
   );
 }

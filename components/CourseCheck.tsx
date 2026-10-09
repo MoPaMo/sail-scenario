@@ -7,11 +7,11 @@ const ICON: Record<Severity, { glyph: string; label: string }> = {
   ok: { glyph: "✓", label: "OK" },
 };
 
-export default function CourseCheck({ analysis, children }: { analysis: Analysis; children?: React.ReactNode }) {
+/** Route stats and checks, without a frame (used by the editor panel and the scenario page's tips). */
+export function CourseDetails({ analysis }: { analysis: Analysis }) {
   const { fastest, safest, columns } = analysis;
   return (
-    <section className="course" aria-labelledby="course-heading">
-      <h2 id="course-heading">Course check</h2>
+    <>
       <dl className="course-stats">
         <div>
           <dt>Length</dt>
@@ -40,7 +40,15 @@ export default function CourseCheck({ analysis, children }: { analysis: Analysis
       <p className="course-footnote">
         The shortest route counts a fish-tail move (straight ahead, two columns) as one move. Hatched spaces on the map are dead ends.
       </p>
-      {children}
+    </>
+  );
+}
+
+export default function CourseCheck({ analysis }: { analysis: Analysis }) {
+  return (
+    <section className="course" aria-labelledby="course-heading">
+      <h2 id="course-heading">Course check</h2>
+      <CourseDetails analysis={analysis} />
     </section>
   );
 }

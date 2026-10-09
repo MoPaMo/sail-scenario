@@ -942,6 +942,48 @@ polygon.token {
   color: var(--text-dim);
 }
 
+/* Tips on a published scenario: closed until the player asks for spoilers. */
+.tips {
+  padding: 22px 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: transparent;
+}
+
+.tips--open {
+  border-style: solid;
+  background: var(--deep-2);
+}
+
+.tips-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tips-head h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--cream);
+}
+
+.tips-cover {
+  max-width: 52ch;
+  color: var(--text-dim);
+}
+
+.tips-note {
+  margin-bottom: 14px;
+  color: var(--text-dim);
+}
+
+.board-frame--view {
+  scroll-margin-top: 16px;
+}
+
 /* ---------------------------------------------------------------- */
 /* Publish dialog (light, like a page of the scenario book)          */
 /* ---------------------------------------------------------------- */
@@ -1460,6 +1502,7 @@ dialog.publish h2 {
   .board-caption,
   .detail-actions,
   .course,
+  .tips,
   .toast-region,
   .route,
   .traps,

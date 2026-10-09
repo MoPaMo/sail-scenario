@@ -15,8 +15,8 @@ Built with Next.js 16 (App Router), React 19 and TypeScript. Ready to deploy on 
 - **Undo/redo**, drag-to-paint with a mouse, autosaved drafts (browser storage), keyboard shortcuts.
 - **Responsive.** On phones the board turns upright (start at the top) so spaces stay tappable, and the token palette becomes a bottom bar.
 - **Accessible.** The board is a keyboard grid (arrow keys move, Enter places, Delete removes), with visible focus and reduced-motion support.
-- **Publishing** with a **Cloudflare Turnstile captcha**, a **profanity check** on the scenario name (and on the author name and notes), rule validation on the server, and per-IP rate limiting.
-- **Gallery** and a shareable page per scenario with "Remix in the editor".
+- **Publishing** with a **Cloudflare Turnstile captcha**, a multilingual **profanity filter** on the scenario name, author name and notes, rule validation on the server, and per-IP rate limiting.
+- **Gallery** and a shareable page per scenario with "Remix in the editor". Spoilers (best route, dead ends, move counts) stay hidden until a player taps **Show tips**.
 - Optional **Seafarers expansion tokens** (whirlpool, ally ship, crow's nest).
 
 ## Token inventory
@@ -109,7 +109,20 @@ A move onto an island or off the board doesn't happen. Entering a kraken space d
 
 ## Profanity filter
 
-`lib/profanity.ts` uses [obscenity](https://github.com/jo3-l/obscenity)'s English dataset (handles leetspeak and look-alike characters) plus a short German list, and rejoins spaced-out letters ("f u c k"). A few nautical false positives are whitelisted ("cockpit", "Moby Dick", "fickle"). "Schwanz" is deliberately not blocked because it's the fish-tail symbol in the German edition. Extend `GERMAN_PATTERNS` / `EXTRA_WHITELIST` as needed. The same check runs live in the editor and authoritatively on the server.
+`lib/profanity.ts` (engine) and `lib/profanity-data.ts` (word data) check the scenario name, author name and notes, live in the editor and again on the server. Users only see a generic message, so the filter can't be probed word by word.
+
+- **English:** [obscenity](https://github.com/jo3-l/obscenity)'s curated dataset, plus extra slurs it misses and an allowlist for real names it would block (Booby Island, Penistone, Great Tit, shiitake, "Mar Negro").
+- **Other languages:** curated patterns for German, French, Spanish, Portuguese, Italian, Dutch, Polish, Czech/Slovak, Croatian/Serbian/Bosnian, Russian/Ukrainian (Cyrillic and transliterated), Turkish, Hungarian, Swedish/Norwegian/Danish and Finnish. Each pattern matches the whole word, the start of a word, or anywhere inside one, so that e.g. "Barsch", "Kirscheis", "Kurve", "Fitting", "Pickle" and "Peder" pass.
+- **Evasions:** invisible characters, Cyrillic/Greek look-alike letters, accents and umlauts (both ö → o and ö → oe), digits and symbols for letters (`sh1t`, `4rsch`, `$h!t`), stretched letters (`fuuuuck`), words split by spaces, dots or dashes (`f u c k`, `wich ser`), and censored spellings (`f*ck`).
+- **Hate symbols and codes:** swastikas, SS runes, 14/88, HH88, 🖕.
+
+`tests/profanity.test.ts` holds about 210 titles that must be blocked and about 180 that must pass (place names, birds, nautical terms, foreign words that look rude). Add to both lists when you change the data.
+
+The word data was cross-checked against the [List of Dirty, Naughty, Obscene and Otherwise Bad Words](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) (CC BY 4.0) but curated by hand: used as whole-word lists, LDNOOBW blocks ordinary words like *pesce* (fish), *regina*, *pot*, *nicht* or *bitte*. "Schwanz" is deliberately allowed: it's the fish-tail symbol in the German edition.
+
+## Spoilers
+
+Published scenario pages show the map and the scenario card only. The best route, dead-end spaces and move counts sit behind a **Tips** panel that players open themselves. The editor always shows them, as a design aid.
 
 ## Project layout
 
@@ -124,6 +137,7 @@ components/
   BoardSvg.tsx             board renderer (horizontal / upright, compact thumbnails)
   LegendCard.tsx           scenario-book card
   CourseCheck.tsx          analysis panel
+  ScenarioBody.tsx         published scenario: map, card, tips behind a reveal
   PublishDialog.tsx        publish form + Turnstile
 lib/
   board.ts                 board geometry and movement
@@ -131,7 +145,8 @@ lib/
   scenario.ts              layout model, editing rules, parsing, share links
   analysis.ts              route finding and checks
   official.ts              the six printed scenarios
-  profanity.ts             name/notes filter
+  profanity.ts             profanity filter (engine)
+  profanity-data.ts        profanity filter (word data)
   turnstile.ts             captcha verification
   store.ts                 Upstash Redis / in-memory storage
   submit.ts                publish pipeline (tested without HTTP)
