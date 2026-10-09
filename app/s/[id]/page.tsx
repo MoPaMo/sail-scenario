@@ -50,9 +50,8 @@ export default async function ScenarioPage({ params }: Props) {
 
       <BoardViewer
         layout={rec.layout}
-        route={analysis.safest?.cells ?? null}
         traps={analysis.traps}
-        label={`Map of ${rec.title}, with the best route drawn in`}
+        label={`Map of ${rec.title}`}
       />
 
       <div className="detail-actions">
