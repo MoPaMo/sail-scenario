@@ -1,4 +1,5 @@
 import { analyze } from "./analysis";
+import { estimateDifficulty } from "./difficulty";
 import { editLinkEmail, isValidEmail, type Mailer } from "./email";
 import { createEditKey, editKeyMatches } from "./editKey";
 import { checkFreeText, checkTitle, cleanTitle } from "./profanity";
@@ -78,16 +79,22 @@ function validateScenario(body: Record<string, unknown>): { ok: true; value: Cle
       layout: usesExpansion(layout) ? layout : { ...layout, whirlpools: [], allies: [], crowsNests: [] },
       stats: {
         columns: analysis.columns ?? 0,
-        moves: analysis.fastest?.moves ?? 0,
-        krakenHits: analysis.safest?.krakenHits ?? 0,
+        moves: analysis.route?.moves ?? 0,
+        krakenHits: analysis.route?.krakenHits ?? 0,
+        bestRound: analysis.best?.round ?? analysis.bestExtra?.round,
       },
     },
   };
 }
 
+/** Simulated win rate for a layout; CPU-heavy, so it runs only after the captcha / edit key check. */
+export type Estimator = (layout: Layout) => number | undefined;
+const defaultEstimate: Estimator = (layout) => estimateDifficulty(layout)?.winRate;
+
 export interface SubmitDeps {
   store: ScenarioStore;
   verify: CaptchaVerifier;
+  estimate?: Estimator;
   /** Present when email is configured. */
   mailer?: Mailer;
   siteUrl?: string;
@@ -135,9 +142,11 @@ export async function handleSubmission(input: unknown, ip: string | null, deps: 
   }
 
   const edit = email ? createEditKey() : null;
+  const winRate = (deps.estimate ?? defaultEstimate)(checked.value.layout);
   const record: ScenarioRecord = {
     id: newId(),
     ...checked.value,
+    stats: { ...checked.value.stats, winRate },
     createdAt: (deps.now?.() ?? new Date()).toISOString(),
     ...(edit ? { editKeyHash: edit.hash } : {}),
   };
@@ -161,6 +170,7 @@ export async function handleSubmission(input: unknown, ip: string | null, deps: 
 interface KeyedDeps {
   store: ScenarioStore;
   now?: () => Date;
+  estimate?: Estimator;
 }
 
 async function authorize(id: string, key: string | null, ip: string | null, deps: KeyedDeps) {
@@ -195,9 +205,11 @@ export async function handleUpdate(
   if (!auth.ok) return auth.res;
   const checked = validateScenario(input as Record<string, unknown>);
   if (!checked.ok) return checked.res;
+  const winRate = (deps.estimate ?? defaultEstimate)(checked.value.layout);
   await deps.store.save({
     ...auth.rec,
     ...checked.value,
+    stats: { ...checked.value.stats, winRate },
     updatedAt: (deps.now?.() ?? new Date()).toISOString(),
   });
   return { status: 200, body: { ok: true, id, url: `/s/${id}` } };

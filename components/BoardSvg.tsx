@@ -18,6 +18,8 @@ export interface BoardSvgProps {
   label: string;
   compact?: boolean;
   route?: string[] | null;
+  /** Round of each move along `route` (route[i + 1] is reached in routeRounds[i]); marks where rounds end. */
+  routeRounds?: number[] | null;
   traps?: string[];
   ghost?: BoardGhost | null;
   interactive?: boolean;
@@ -60,6 +62,7 @@ export default function BoardSvg({
   label,
   compact = false,
   route,
+  routeRounds,
   traps = [],
   ghost,
   interactive = false,
@@ -224,6 +227,20 @@ export default function BoardSvg({
             const [x, y] = center(id);
             return <circle key={`r-${id}`} cx={x} cy={y} r={routeKraken.has(id) ? 9 : 3.2} className={routeKraken.has(id) ? "route-hit" : "route-dot"} />;
           })}
+          {routeRounds &&
+            routeRounds.map((round, i) => {
+              const last = i === routeRounds.length - 1;
+              if (last || routeRounds[i + 1] === round) return null;
+              const [x, y] = center(route[i + 1]);
+              const off = compact ? 0 : 15;
+              return (
+                <g key={`rr-${i}`} className="round-mark" transform={`translate(${x + off} ${y - off})`}>
+                  <title>{`End of round ${round} in the best case`}</title>
+                  <circle r={compact ? 6 : 8.5} />
+                  <text y={compact ? 2.5 : 3.5}>{round}</text>
+                </g>
+              );
+            })}
         </g>
       )}
 

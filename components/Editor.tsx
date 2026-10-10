@@ -25,6 +25,7 @@ import {
 import { BASE_PIECES, EXPANSION_PIECES, MAX_STORMS, PIECE_LIMITS, TOOL_INFO, type PieceKind, type Tool } from "@/lib/tokens";
 import BoardSvg, { type BoardGhost } from "./BoardSvg";
 import CourseCheck from "./CourseCheck";
+import { useDifficulty } from "./useDifficulty";
 import EditDialog from "./EditDialog";
 import LegendCard from "./LegendCard";
 import PublishDialog, { type PublishConfig } from "./PublishDialog";
@@ -303,6 +304,9 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
 
   /* ---------- derived ---------- */
   const analysis = useMemo(() => analyze(layout), [layout]);
+  // Simulate only layouts that can actually be played (copies of printed scenarios included).
+  const playable = analysis.reachable && analysis.errors.every((e) => e.includes("exactly as printed"));
+  const difficulty = useDifficulty(layout, ready && playable);
   const occ = useMemo(() => occupancy(layout), [layout]);
 
   const ghost = useMemo<BoardGhost | null>(() => {
@@ -362,7 +366,8 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
 
   const titleCheck = checkTitle(title);
   const titleMessage = title.trim() === "" ? "Needed to publish." : titleCheck.ok ? `${title.trim().length}/${TITLE_MAX}` : titleCheck.message;
-  const bestRoute = showRoute ? (analysis.safest?.cells ?? null) : null;
+  const bestRoute = showRoute ? (analysis.route?.cells ?? null) : null;
+  const routeRounds = showRoute ? (analysis.route?.moveRounds ?? null) : null;
 
   const countLabel = (t: Tool): string => {
     if (t === "start") return layout.start ? `On ${layout.start}` : "Not placed";
@@ -488,6 +493,7 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
             label="Scenario board. Use the arrow keys to move between spaces and Enter to place the selected token."
             interactive
             route={bestRoute}
+            routeRounds={routeRounds}
             traps={showRoute ? analysis.traps : []}
             ghost={ghost}
             activeCell={activeCell}
@@ -536,7 +542,7 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
             </label>
           }
         />
-        <CourseCheck analysis={analysis} />
+        <CourseCheck analysis={analysis} difficulty={difficulty} />
       </div>
 
       {edit ? (

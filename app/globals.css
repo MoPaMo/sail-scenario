@@ -945,6 +945,178 @@ polygon.token {
   color: var(--ok);
 }
 
+.course-stats dd small {
+  font: 500 14px/1 var(--font-body);
+  color: var(--text-dim);
+}
+
+/* Simulated difficulty */
+.difficulty {
+  margin: 0 0 16px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.difficulty--running .ladder,
+.difficulty--running .level {
+  opacity: 0.7;
+}
+
+.difficulty-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.difficulty-compare {
+  color: var(--text);
+}
+
+.level {
+  display: inline-block;
+  padding: 4px 11px 5px;
+  border-radius: 999px;
+  font: 700 17px/1 var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+.level--easy {
+  background: var(--ok);
+  color: var(--deep);
+}
+.level--medium {
+  background: var(--mint);
+  color: var(--deep);
+}
+.level--hard {
+  background: var(--kraken);
+  color: var(--deep);
+}
+.level--very-hard {
+  background: #f39a46;
+  color: var(--deep);
+}
+.level--brutal {
+  background: var(--danger);
+  color: var(--deep);
+}
+.level--impossible {
+  background: var(--kraken-edge);
+  color: #fff;
+}
+
+.ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.ladder li {
+  display: grid;
+  justify-items: center;
+  min-width: 54px;
+  padding: 5px 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-dim);
+}
+
+.ladder li.is-this {
+  border-color: var(--cream);
+  background: var(--deep-3);
+  color: var(--cream);
+}
+
+.ladder-name {
+  font: 600 15px/1.1 var(--font-display);
+}
+
+.ladder-rate {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.difficulty-note {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.difficulty--pending {
+  border-bottom: 0;
+}
+
+.course-method {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.course-method summary {
+  cursor: pointer;
+  font: 600 15px/1.4 var(--font-display);
+  color: var(--text);
+}
+
+.course-method p {
+  margin-top: 8px;
+  max-width: 70ch;
+}
+
+/* Round markers on the best-case route */
+.round-mark circle {
+  fill: var(--deep);
+  stroke: var(--cream);
+  stroke-width: 1.5;
+}
+
+.round-mark text {
+  font: 700 11px/1 var(--font-display);
+  text-anchor: middle;
+  fill: var(--cream);
+}
+
+.board--compact .round-mark text {
+  font-size: 8px;
+}
+
+/* Scenario page: difficulty above the tips */
+.side {
+  display: grid;
+  gap: 16px;
+}
+
+.difficulty-panel {
+  padding: 20px 24px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--deep-2);
+}
+
+.difficulty-panel h2 {
+  margin: 0 0 12px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--cream);
+}
+
+.difficulty-panel .difficulty {
+  border-bottom: 0;
+}
+
+/* Gallery badge */
+.card-level {
+  margin-left: auto;
+}
+
+.card-level .level {
+  padding: 3px 9px 4px;
+  font-size: 15px;
+}
+
 .course-footnote {
   margin-top: 16px;
   font-size: 13px;
@@ -1281,6 +1453,10 @@ dialog.publish h2 {
   color: var(--text-dim);
 }
 
+.card-stats .card-length + .card-level {
+  margin-left: 0;
+}
+
 .empty {
   display: flex;
   flex-wrap: wrap;
@@ -1562,6 +1738,7 @@ dialog.publish h2 {
   .owner-hint,
   .course,
   .tips,
+  .difficulty-panel,
   .toast-region,
   .route,
   .traps,

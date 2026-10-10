@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import BoardSvg from "@/components/BoardSvg";
 import TokenIcon from "@/components/TokenIcon";
+import { difficultyLevel } from "@/lib/difficultyScale";
 import { formatDate } from "@/lib/format";
 import { OFFICIAL_SCENARIOS } from "@/lib/official";
 import { getStore } from "@/lib/store";
@@ -74,6 +75,11 @@ export default async function GalleryPage({ searchParams }: { searchParams: Prom
                       <span className="sr-only"> storms</span>
                     </li>
                     <li className="card-length">{s.stats.columns} columns</li>
+                    {typeof s.stats.winRate === "number" && (
+                      <li className="card-level">
+                        <span className={`level level--${difficultyLevel(s.stats.winRate).level}`}>{difficultyLevel(s.stats.winRate).label}</span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               </Link>

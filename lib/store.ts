@@ -15,8 +15,13 @@ import type { Layout } from "./scenario";
 
 export interface ScenarioStats {
   columns: number;
+  /** Moves and Kraken spaces on the best-case route. */
   moves: number;
   krakenHits: number;
+  /** Earliest round the End can be reached with ideal cards. */
+  bestRound?: number;
+  /** Share of simulated games won (see lib/difficulty.ts); missing on scenarios published before it existed. */
+  winRate?: number;
 }
 
 export interface ScenarioRecord {

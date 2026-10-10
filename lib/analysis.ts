@@ -1,4 +1,6 @@
-import { ALL_CELLS, cellId, columnOf, endTokenCellIds, forwardMoves, parseCell, type CellPos } from "./board";
+import { columnOf } from "./board";
+import { boardFromLayout, CELL_ID, COL, DIR_AHEAD, DIR_BOTTOM, DIR_TOP, step, type Board } from "./game/geometry";
+import { earliest, type IdealOptions, type IdealPlan } from "./game/ideal";
 import { OFFICIAL_SCENARIOS } from "./official";
 import { occupancy, type Layout } from "./scenario";
 
@@ -9,136 +11,85 @@ export interface Check {
   text: string;
 }
 
-export interface Route {
-  cells: string[]; // includes the start
+/** A best-case plan, with cell ids for display. */
+export interface Plan {
+  round: number;
+  trick: number;
+  tricks: number;
   moves: number;
   krakenHits: number;
+  cells: string[];
+  /** Round of each move (cells[i + 1] is reached in moveRounds[i]). */
+  moveRounds: number[];
 }
 
 export interface StormCheck {
   column: number;
   deadlineRound: number;
-  maxTricks: number;
-  movesToPass: number | null;
+  /** Earliest passing with ideal cards, without pirates / with pirate 4. */
+  best: Plan | null;
+  bestExtra: Plan | null;
 }
 
 export interface Analysis {
   checks: Check[];
   errors: string[];
   canPublish: boolean;
+  /** The End can be reached at all (ignoring time). */
   reachable: boolean;
   columns: number | null;
-  fastest: Route | null;
-  safest: Route | null;
+  /** Earliest finish with ideal cards: without pirate powers, and with pirate 4's extra trick. */
+  best: Plan | null;
+  bestExtra: Plan | null;
   storms: StormCheck[];
+  /** Route to draw: the best-case plan. */
+  route: Plan | null;
   /** Spaces the ship can reach but from which the End can no longer be reached. */
   traps: string[];
-  comparable: string | null;
 }
 
-/** A round ends when one player wins their 4th trick, so it lasts 4–7 tricks. */
-export const MAX_TRICKS_PER_ROUND = 7;
-export const ROUNDS = 5;
+/** The model behind "best case", for the explanation under the course check. */
+export const BEST_CASE_RULES =
+  "Best case: every trick moves the ship, helm moves go towards whoever wins the trick, a round ends at someone's 4th win (4–7 tricks), and at most one fish-tail move per round, since that takes two of the three 9s.";
 
-interface Graph {
-  blocked: Set<string>;
-  kraken: Set<string>;
-  goal: Set<string>;
-}
+const IDEAL: IdealOptions = {};
+const IDEAL_EXTRA: IdealOptions = { extraTrick: true };
+/** Absolute limit: a move on every trick, any direction, straight whenever wanted, 8 tricks a round. */
+const ANYTHING: IdealOptions = { extraTrick: true, freeDirection: true, straightPerRound: 8 };
 
-function buildGraph(l: Layout): Graph {
-  return {
-    blocked: new Set(l.islands),
-    kraken: new Set(l.kraken),
-    goal: new Set(l.end ? endTokenCellIds(l.end) : []),
-  };
-}
+const toPlan = (p: IdealPlan | null): Plan | null =>
+  p && { round: p.round, trick: p.trick, tricks: p.tricks, moves: p.moves, krakenHits: p.krakenHits, cells: p.cells.map((c) => CELL_ID[c]), moveRounds: p.moveRounds };
 
-function nextCells(g: Graph, p: CellPos): CellPos[] {
-  return forwardMoves(p)
-    .map((m) => m.to)
-    .filter((to) => !g.blocked.has(cellId(to.r, to.c)));
-}
+const when = (p: Plan) => (p.trick > 0 ? `trick ${p.trick} of round ${p.round}` : `round ${p.round}`);
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/**
- * Lexicographic shortest path from the start to any End space.
- * `primary` decides whether we minimise moves first or kraken hits first.
- * The ship stops as soon as it touches an End space, so goal spaces are terminal.
- */
-function bestRoute(l: Layout, g: Graph, primary: "moves" | "kraken"): Route | null {
-  if (!l.start) return null;
-  const start = l.start;
-  const cost = new Map<string, [number, number]>([[start, [0, 0]]]);
-  const prev = new Map<string, string>();
-  const done = new Set<string>();
-  const key = (c: [number, number]) => (primary === "moves" ? c[0] * 1000 + c[1] : c[1] * 1000 + c[0]);
-
-  for (;;) {
-    let current: string | null = null;
-    for (const [id, c] of cost) {
-      if (done.has(id)) continue;
-      if (current === null || key(c) < key(cost.get(current)!)) current = id;
-    }
-    if (current === null) return null;
-    if (g.goal.has(current)) {
-      const cells = [current];
-      while (prev.has(cells[0])) cells.unshift(prev.get(cells[0])!);
-      const [moves, krakenHits] = cost.get(current)!;
-      return { cells, moves, krakenHits };
-    }
-    done.add(current);
-    const [m, k] = cost.get(current)!;
-    for (const to of nextCells(g, parseCell(current)!)) {
-      const id = cellId(to.r, to.c);
-      if (done.has(id)) continue;
-      const cand: [number, number] = [m + 1, k + (g.kraken.has(id) ? 1 : 0)];
-      const old = cost.get(id);
-      if (!old || key(cand) < key(old)) {
-        cost.set(id, cand);
-        prev.set(id, current);
-      }
-    }
-  }
-}
-
-/** Fewest moves from the start to every reachable space (stopping at the End). */
-function moveDistances(l: Layout, g: Graph): Map<string, number> {
-  const dist = new Map<string, number>();
-  if (!l.start) return dist;
-  dist.set(l.start, 0);
-  const queue = [l.start];
+/** Spaces reachable at all, ignoring time, with any move. */
+function reachableCells(b: Board): Set<number> {
+  const seen = new Set<number>([b.start]);
+  const queue = [b.start];
   while (queue.length) {
-    const id = queue.shift()!;
-    if (g.goal.has(id)) continue;
-    for (const to of nextCells(g, parseCell(id)!)) {
-      const t = cellId(to.r, to.c);
-      if (!dist.has(t)) {
-        dist.set(t, dist.get(id)! + 1);
+    const c = queue.shift()!;
+    if (b.goal[c]) continue;
+    for (const dir of [DIR_TOP, DIR_BOTTOM, DIR_AHEAD]) {
+      const t = step(b, c, dir);
+      if (t >= 0 && !seen.has(t)) {
+        seen.add(t);
         queue.push(t);
       }
     }
   }
-  return dist;
+  return seen;
 }
 
 /** Spaces from which some sequence of moves still reaches the End. */
-function canReachEnd(g: Graph): Set<string> {
-  const ok = new Set<string>(g.goal);
-  // Moves only go to higher columns, so a right-to-left sweep is enough.
-  const cells = [...ALL_CELLS].sort((a, b) => b.c - a.c);
-  for (const p of cells) {
-    const id = cellId(p.r, p.c);
-    if (ok.has(id) || g.blocked.has(id)) continue;
-    if (nextCells(g, p).some((to) => ok.has(cellId(to.r, to.c)))) ok.add(id);
+function canReachEnd(b: Board): Set<number> {
+  const ok = new Set<number>();
+  const order = [...COL.keys()].sort((x, y) => COL[y] - COL[x]);
+  for (const c of order) {
+    if (b.island[c]) continue;
+    if (b.goal[c] || [DIR_TOP, DIR_BOTTOM, DIR_AHEAD].some((d) => ok.has(step(b, c, d)))) ok.add(c);
   }
   return ok;
-}
-
-function officialColumns(): { name: string; columns: number }[] {
-  return OFFICIAL_SCENARIOS.map((s) => ({
-    name: s.name,
-    columns: columnOf(s.layout.end!) - columnOf(s.layout.start!),
-  }));
 }
 
 function signature(l: Layout): string {
@@ -163,115 +114,131 @@ export function analyze(l: Layout): Analysis {
   const ok = (text: string) => checks.push({ severity: "ok", text });
   const info = (text: string) => checks.push({ severity: "info", text });
 
-  const g = buildGraph(l);
-  const occ = occupancy(l);
-  const startCol = l.start ? columnOf(l.start) : null;
-  const tipCol = l.end ? columnOf(l.end) : null;
+  const result: Analysis = {
+    checks,
+    errors,
+    canPublish: false,
+    reachable: false,
+    columns: null,
+    best: null,
+    bestExtra: null,
+    storms: [],
+    route: null,
+    traps: [],
+  };
 
   if (!l.start) error("Place the Start token.");
   if (!l.end) error("Place the End token.");
+  const startCol = l.start ? columnOf(l.start) : null;
+  const tipCol = l.end ? columnOf(l.end) : null;
+  const b = boardFromLayout(l);
 
-  let fastest: Route | null = null;
-  let safest: Route | null = null;
-  let columns: number | null = null;
-  let traps: string[] = [];
-  const storms: StormCheck[] = [];
-  let comparable: string | null = null;
+  // Storm placement problems are independent of the route.
+  const stormName = (i: number) => (l.storms.length === 1 ? "The storm" : i === 0 ? "The first storm" : "The second storm");
+  const sortedStorms = [...l.storms].sort((x, y) => x - y);
+  let stormsPlaced = true;
+  sortedStorms.forEach((col, i) => {
+    if (startCol !== null && col < startCol) {
+      error(`${stormName(i)} at column ${col} is behind the Start, so it would already be passed.`);
+      stormsPlaced = false;
+    } else if (tipCol !== null && col >= tipCol - 1) {
+      error(`${stormName(i)} at column ${col} sits on or past the End. Move it before column ${tipCol - 1}.`);
+      stormsPlaced = false;
+    }
+  });
 
-  if (l.start && l.end && startCol !== null && tipCol !== null) {
-    columns = tipCol - startCol;
-    if (columns <= 1) {
+  if (b && startCol !== null && tipCol !== null) {
+    result.columns = tipCol - startCol;
+    if (result.columns <= 1) {
       error("The End must be ahead of the Start: the ship only ever sails forward (left to right).");
     } else {
-      fastest = bestRoute(l, g, "moves");
-      safest = bestRoute(l, g, "kraken");
-      if (!fastest || !safest) {
+      const reach = reachableCells(b);
+      result.reachable = [...reach].some((c) => b.goal[c]);
+      if (!result.reachable) {
         error("The End can't be reached from the Start. Islands block every forward route.");
-      } else {
-        ok(`The End is reachable. The fastest route takes ${fastest.moves} moves.`);
-        if (safest.krakenHits === 0) {
-          ok(
-            fastest.krakenHits === 0
-              ? "A route exists that avoids every kraken space."
-              : `The safest route avoids every kraken space but takes ${safest.moves} moves (the fastest passes ${fastest.krakenHits}).`,
-          );
-        } else {
-          info(`Every route crosses at least ${safest.krakenHits} kraken space${safest.krakenHits > 1 ? "s" : ""}.`);
-        }
-        const maxTricks = ROUNDS * MAX_TRICKS_PER_ROUND;
-        if (fastest.moves > maxTricks) {
+      } else if (stormsPlaced) {
+        analyseTiming(l, b, result, { error, warn, ok, info }, stormName);
+        const good = canReachEnd(b);
+        result.traps = [...reach]
+          .filter((c) => !good.has(c) && !b.goal[c] && COL[c] < tipCol - 1)
+          .map((c) => CELL_ID[c])
+          .sort((x, y) => columnOf(x) - columnOf(y) || x.localeCompare(y));
+        if (result.traps.length) {
+          const n = result.traps.length;
           warn(
-            `The fastest route needs ${fastest.moves} moves, but a game lasts at most ${maxTricks} tricks. Only lucky cannon flips could finish it.`,
+            `${n === 1 ? "1 space is a dead end" : `${n} spaces are dead ends`} (${result.traps.join(", ")}): once the ship is there, the End can't be reached.`,
           );
         }
       }
-
-      const official = officialColumns();
-      const closest = official.reduce((a, b) => (Math.abs(b.columns - columns!) < Math.abs(a.columns - columns!) ? b : a));
-      comparable = closest.columns === columns ? `the same length as ${closest.name}` : `closest in length to ${closest.name} (${closest.columns})`;
-    }
-  }
-
-  // Storms
-  const dist = moveDistances(l, g);
-  l.storms.forEach((col, i) => {
-    const deadlineRound = l.storms.length === 1 || i === 0 ? 2 : 4;
-    const maxTricks = deadlineRound * MAX_TRICKS_PER_ROUND;
-    let movesToPass: number | null = null;
-    for (const [id, d] of dist) {
-      if (columnOf(id) > col && (movesToPass === null || d < movesToPass)) movesToPass = d;
-    }
-    storms.push({ column: col, deadlineRound, maxTricks, movesToPass });
-    const label = l.storms.length === 1 ? "The storm" : i === 0 ? "The first storm" : "The second storm";
-    if (startCol !== null && col < startCol) {
-      error(`${label} at column ${col} is behind the Start, so it would already be passed.`);
-    } else if (tipCol !== null && col >= tipCol - 1) {
-      error(`${label} at column ${col} sits on or past the End. Move it before column ${tipCol - 1}.`);
-    } else if (l.start && movesToPass === null) {
-      error(`${label} at column ${col} can't be passed: no route gets the ship beyond it.`);
-    } else if (movesToPass !== null && movesToPass > maxTricks) {
-      warn(
-        `${label} at column ${col} needs ${movesToPass} moves to pass, but only ${maxTricks} tricks can happen by the end of round ${deadlineRound}.`,
-      );
-    } else if (movesToPass !== null) {
-      ok(`${label} at column ${col} can be passed in ${movesToPass} moves (deadline: end of round ${deadlineRound}).`);
-    }
-  });
-  if (l.storms.length === 0 && l.start && l.end) {
-    info("No storms. Only the 5-round limit and the Kraken put the crew under time pressure.");
-  }
-
-  // Traps: reachable spaces left of the finish line from which the End is lost for good.
-  if (l.start && l.end && tipCol !== null && fastest) {
-    const good = canReachEnd(g);
-    traps = [...dist.keys()].filter((id) => !good.has(id) && columnOf(id) < tipCol - 1 && occ.get(id) !== "end");
-    if (traps.length) {
-      warn(
-        `${traps.length} space${traps.length > 1 ? "s are" : " is a"} dead end${traps.length > 1 ? "s" : ""} (${traps.join(", ")}): once the ship is there, the End can't be reached.`,
-      );
     }
   }
 
   const copy = officialCopy(l);
   if (copy) error(`This is ${copy} exactly as printed. Change at least one token to publish it as your own.`);
-
-  if (l.start && startCol !== null && startCol > 3) {
-    info(`The Start is on column ${startCol}. Every printed scenario starts on D1.`);
+  if (startCol !== null && startCol > 3) info(`The Start is on column ${startCol}. Every printed scenario starts on D1.`);
+  if (l.storms.length === 0 && l.start && l.end) {
+    info("No storms. Only the 5-round limit and the Kraken put the crew under time pressure.");
   }
 
   const order: Record<Severity, number> = { error: 0, warning: 1, info: 2, ok: 3 };
-  checks.sort((a, b) => order[a.severity] - order[b.severity]);
+  checks.sort((x, y) => order[x.severity] - order[y.severity]);
+  result.canPublish = errors.length === 0;
+  return result;
+}
 
-  return {
-    checks,
-    errors,
-    canPublish: errors.length === 0,
-    reachable: !!fastest,
-    columns,
-    fastest,
-    safest,
-    storms,
-    traps,
-    comparable,
-  };
+type Report = Record<"error" | "warn" | "ok" | "info", (text: string) => void>;
+
+function analyseTiming(l: Layout, b: Board, result: Analysis, report: Report, stormName: (i: number) => string) {
+  const isEnd = (c: number) => b.goal[c] === 1;
+
+  // Storms first: each must be passed by its deadline (the earlier one's deadline also applies).
+  let stormsFeasible = true;
+  let stormNeedsLuck = false;
+  b.storms.forEach((col, i) => {
+    const past = (c: number) => COL[c] > col;
+    const deadline = b.deadlines[i];
+    const check: StormCheck = {
+      column: col,
+      deadlineRound: deadline,
+      best: toPlan(earliest(b, past, IDEAL)),
+      bestExtra: toPlan(earliest(b, past, IDEAL_EXTRA)),
+    };
+    result.storms.push(check);
+    const label = `${stormName(i)} at column ${col}`;
+    if (check.best) {
+      report.ok(`${label} can be passed by ${when(check.best)} at the earliest (deadline: end of round ${deadline}).`);
+    } else if (check.bestExtra) {
+      stormNeedsLuck = true;
+      report.warn(`${label} can only be passed by the end of round ${deadline} with pirate 4's extra trick and ideal cards.`);
+    } else if (earliest(b, past, ANYTHING)) {
+      stormNeedsLuck = true;
+      report.warn(`${label} can't be passed by the end of round ${deadline} even with ideal cards: only lucky cannon flips or straight-moving pirates could do it.`);
+    } else {
+      stormsFeasible = false;
+      report.error(`${label} can't be passed by the end of round ${deadline}, even if every trick moved the ship two columns. Move it further right, or the islands out of the way.`);
+    }
+  });
+  if (!stormsFeasible) return;
+
+  result.best = toPlan(earliest(b, isEnd, IDEAL));
+  result.bestExtra = toPlan(earliest(b, isEnd, IDEAL_EXTRA));
+  result.route = result.best ?? result.bestExtra;
+  if (result.best) {
+    const p = result.best;
+    report.ok(`With ideal cards the End can be reached by ${when(p)} at the earliest: ${plural(p.tricks, "trick")}, ${plural(p.moves, "move")}.`);
+  } else if (stormNeedsLuck) {
+    // The storm warning above already explains why the End can't be reached in time.
+  } else if (result.bestExtra) {
+    report.warn("The End can only be reached in time with pirate 4's extra trick and ideal cards.");
+  } else if (earliest(b, isEnd, ANYTHING)) {
+    report.warn("Even ideal cards can't reach the End in 5 rounds: only lucky cannon flips or straight-moving pirates could finish it.");
+  } else {
+    report.error("The End can't be reached within 5 rounds, even if every trick moved the ship two columns.");
+    return;
+  }
+  const route = result.route;
+  if (route && route.krakenHits > 0) {
+    report.info(`The best route crosses ${plural(route.krakenHits, "kraken space")}; each one damages the ship.`);
+  }
+  void l;
 }

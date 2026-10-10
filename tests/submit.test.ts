@@ -51,7 +51,7 @@ test("profanity: blocks English and German, spares nautical words", () => {
 
 test("publishes a valid scenario", async () => {
   const store = fakeStore();
-  const res = await handleSubmission({ title: "  Kraken   Alley ", author: "Moritz", notes: "", layout: custom, captchaToken: "t" }, "1.2.3.4", { store, verify: pass });
+  const res = await handleSubmission({ title: "  Kraken   Alley ", author: "Moritz", notes: "", layout: custom, captchaToken: "t" }, "1.2.3.4", { store, verify: pass, estimate: () => 0.5 });
   assert.equal(res.status, 201);
   assert.equal(store.saved.length, 1);
   assert.equal(store.saved[0].title, "Kraken Alley");
@@ -67,6 +67,7 @@ test("rejects a profane title before spending the captcha", async () => {
       captchaCalls++;
       return { success: true, codes: [] };
     },
+    estimate: () => 0.5,
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.ok, false);
@@ -77,7 +78,7 @@ test("rejects a profane title before spending the captcha", async () => {
 
 test("rejects a failed captcha", async () => {
   const store = fakeStore();
-  const res = await handleSubmission({ title: "Kraken Alley", layout: custom, captchaToken: "bad" }, null, { store, verify: failCaptcha });
+  const res = await handleSubmission({ title: "Kraken Alley", layout: custom, captchaToken: "bad" }, null, { store, verify: failCaptcha, estimate: () => 0.5 });
   assert.equal(res.status, 403);
   assert.equal(store.saved.length, 0);
 });
@@ -85,9 +86,9 @@ test("rejects a failed captcha", async () => {
 test("rejects rule-breaking and copied layouts", async () => {
   const store = fakeStore();
   const tooMany = { ...custom, kraken: ["A4", "A6", "A8", "A10", "A12", "A14", "A16", "A18", "A20", "A22"] };
-  const r1 = await handleSubmission({ title: "Ten Krakens", layout: tooMany, captchaToken: "t" }, null, { store, verify: pass });
+  const r1 = await handleSubmission({ title: "Ten Krakens", layout: tooMany, captchaToken: "t" }, null, { store, verify: pass, estimate: () => 0.5 });
   assert.equal(r1.status, 400);
-  const r2 = await handleSubmission({ title: "Not Mine", layout: OFFICIAL_SCENARIOS[2].layout, captchaToken: "t" }, null, { store, verify: pass });
+  const r2 = await handleSubmission({ title: "Not Mine", layout: OFFICIAL_SCENARIOS[2].layout, captchaToken: "t" }, null, { store, verify: pass, estimate: () => 0.5 });
   assert.equal(r2.status, 400);
   assert.ok(!r2.body.ok && r2.body.details?.some((d) => d.includes("exactly as printed")));
 });
@@ -96,7 +97,7 @@ test("rate limits repeated submissions from one address", async () => {
   const store = fakeStore();
   const statuses: number[] = [];
   for (let i = 0; i < 6; i++) {
-    const r = await handleSubmission({ title: `Run ${i + 1} Reef`, layout: custom, captchaToken: "t" }, "9.9.9.9", { store, verify: pass });
+    const r = await handleSubmission({ title: `Run ${i + 1} Reef`, layout: custom, captchaToken: "t" }, "9.9.9.9", { store, verify: pass, estimate: () => 0.5 });
     statuses.push(r.status);
   }
   assert.deepEqual(statuses, [201, 201, 201, 201, 201, 429]);
@@ -121,7 +122,7 @@ async function publishWithEmail(store: ReturnType<typeof fakeStore>, ok = true) 
   const res = await handleSubmission(
     { title: "Kraken Alley", layout: custom, captchaToken: "t", email: "Captain@Example.org" },
     "1.1.1.1",
-    { store, verify: pass, mailer: mail.mailer, siteUrl: "https://sail.mopamo.dev" },
+    { store, verify: pass, mailer: mail.mailer, siteUrl: "https://sail.mopamo.dev", estimate: () => 0.5 },
   );
   const key = /#k=([A-Za-z0-9_-]+)/.exec(mail.sent[0]?.text ?? (res.body.ok ? res.body.editUrl ?? "" : ""))?.[1] ?? "";
   return { res, mail, key };
@@ -156,10 +157,11 @@ test("email: rejected when invalid or when email isn't configured", async () => 
     store,
     verify: pass,
     mailer: capturingMailer().mailer,
+    estimate: () => 0.5,
   });
   assert.equal(bad.status, 400);
   assert.ok(!bad.body.ok && bad.body.field === "email");
-  const off = await handleSubmission({ title: "Kraken Alley", layout: custom, captchaToken: "t", email: "a@b.org" }, null, { store, verify: pass });
+  const off = await handleSubmission({ title: "Kraken Alley", layout: custom, captchaToken: "t", email: "a@b.org" }, null, { store, verify: pass, estimate: () => 0.5 });
   assert.equal(off.status, 400);
   assert.equal(store.saved.length, 0);
 });
@@ -175,7 +177,7 @@ test("edit: right key updates, wrong key and keyless scenarios are refused", asy
   const store = fakeStore();
   const { res, key } = await publishWithEmail(store);
   const id = res.body.ok ? res.body.id : "";
-  const deps = { store, now: () => new Date("2026-10-11T10:00:00Z") };
+  const deps = { store, now: () => new Date("2026-10-11T10:00:00Z"), estimate: () => 0.4 };
 
   assert.equal((await handleAccess(id, key, "2.2.2.2", deps)).status, 200);
   assert.equal((await handleAccess(id, "x".repeat(43), "2.2.2.2", deps)).status, 403);
@@ -194,7 +196,7 @@ test("edit: right key updates, wrong key and keyless scenarios are refused", asy
   assert.equal((await handleUpdate(id, key, { ...changed, title: "Shit Storm" }, "2.2.2.2", deps)).status, 400);
 
   // A scenario published without an email can't be edited by anyone.
-  const plain = await handleSubmission({ title: "No Email Reef", layout: custom, captchaToken: "t" }, "3.3.3.3", { store, verify: pass });
+  const plain = await handleSubmission({ title: "No Email Reef", layout: custom, captchaToken: "t" }, "3.3.3.3", { store, verify: pass, estimate: () => 0.5 });
   const plainId = plain.body.ok ? plain.body.id : "";
   assert.equal((await handleUpdate(plainId, key, changed, "2.2.2.2", deps)).status, 403);
 });

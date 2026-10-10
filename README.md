@@ -8,7 +8,7 @@ Built with Next.js 16 (App Router), React 19 and TypeScript. Ready to deploy on 
 
 - **Board editor** with the real board geometry: rows A–G, columns 1–25, tapering to D1 and D25 (79 spaces).
 - **Token limits from the box.** You can't place more than the game contains (see below).
-- **Course check:** reachability, shortest route, unavoidable kraken spaces, storm deadlines (round 2 / round 4), and dead-end spaces the ship can enter but never leave towards the End. The best route and dead ends are drawn on the map.
+- **Course check:** a best-case plan that respects the round structure (4–7 tricks, helm moves towards the trick winner, one fish-tail move a round) for both storm deadlines and the End, plus a difficulty estimate from 400 simulated games with the real cards, compared with the printed scenarios. The best route, round markers and dead ends are drawn on the map.
 - **Scenario card** in the scenario book's format (START / ISLAND / KRAKEN / END / STORM), plus a print layout that fits board and card on one A4 landscape page.
 - **Start from** any of the six printed scenarios. Publishing an unchanged copy is blocked.
 - **Share links** that encode the layout in readable coordinates: `/?s=D1&e=D17&i=D3.G6&k=G4.A6&w=5.12&t=Name`.
@@ -126,14 +126,42 @@ A `layout` looks like:
 
 The server rejects off-board spaces, overlaps, more tokens than the box holds, unreachable Ends, storms behind the Start or on/past the End, and unchanged copies of printed scenarios. Cheap checks run before the captcha token is verified, so a typo doesn't burn the user's captcha.
 
-## How the course check models movement
+## How the course check works
 
-Every move goes forward (to higher columns):
+The check combines three layers, all in `lib/game/`.
 
-- **helm pairs** (and helm cannon flips) move one step diagonally, towards the trick winner's side of the board (row A side or row G side);
-- **fish-tail pairs** move straight ahead one space, which is two columns.
+### Rules it uses
 
-A move onto an island or off the board doesn't happen. Entering a kraken space damages the ship. Touching any End space wins immediately. "Shortest route" is the minimum number of moves; the drawn route avoids kraken spaces first, then minimises moves. A round lasts 4–7 tricks, so the check warns if a storm needs more moves than the tricks available before its deadline.
+- **Cards** (`cards.ts`): three colours numbered 1–9, with the symbol set by the number: **1–3 helm with tentacle, 4–5 cannon, 6–8 helm, 9 fish tail** (one per colour). The 1s and 2s start in the Kraken deck, and 3–9 (21 cards) form the player deck.
+- **Tricks:** follow the led colour, and the highest card of that colour wins. Pairs: helm + helm moves one column diagonally towards the trick's winner; with tentacles it also deals 1 or 2 damage, even if the move is blocked. Fish + fish goes two columns straight. Tentacle + cannon puts the tentacle card under the Kraken deck. Cannon + cannon flips deck cards until a non-cannon shows and applies it. Every other pair does nothing.
+- **Rounds:** 9 cards each, one passed blind. A round ends at someone's 4th trick win (4–7 tricks; pirate 4 adds one when *its* player reaches 4). The Kraken strikes at round end. Storms must be passed by the end of round 2 (and 4), and the game ends after round 5.
+- **Kraken:** damage moves the top Kraken card into the player deck. When the Kraken card itself would move, the meeple advances instead. You lose when only the Kraken card is left or the meeple reaches Dead.
+- **Pirates 1–6**: as described in the BGA rules summary. Pirate 2's peek at the passed card is not modelled.
+
+### Best case (`ideal.ts`)
+
+An exact search over (space, round, tricks won by each player, fish moves used) for the earliest moment the ship can reach a storm's far side or the End, assuming **every trick makes the move you want**, with these real limits:
+
+- helm moves go towards the trick's winner;
+- a round ends at a 4th win, so one direction gets at most 4 moves a round;
+- at most one fish-tail move per round, since it needs two of the three 9s.
+
+The search runs with and without pirate 4. The route drawn in the editor is this plan, with a marker where each round ends.
+
+- *Error* when even a two-column move on every trick can't make a deadline. This physical limit only bites when islands block the straight lanes.
+- *Warning* when ideal cards aren't enough, or only pirate 4 makes it.
+
+### Difficulty (`simulate.ts`, `lib/difficulty.ts`)
+
+400 simulated games of the real card game, seeded from the layout so the same layout always gets the same result in the editor, on the server and in tests:
+
+- The leading player only knows their own hand and public information: discards, the face-up Kraken deck, the card they passed, and colours the partner has shown to be out of. They weigh each lead against sampled partner hands. The follower sees the lead and picks the best reply.
+- Decisions value progress towards the End, urgency before storm deadlines, Kraken health against the damage still to come, and the cards kept in hand.
+- The result is labelled by comparing it with the printed scenarios run the same way. In this simulation, Learning wins 98.5%, S1 96%, S2 80%, S3 75%, S4 24% and S5 18% of games. `tests/difficulty.test.ts` fails if the engine changes these, so the scale stays in sync.
+
+Simulated crews play without pirate powers and don't talk, so absolute percentages are a yardstick, not a promise. The comparison with the printed scenarios is the useful part. Publishing stores the win rate, which the gallery and share images show as Easy / Medium / Hard / Very hard / Brutal.
+
+**Assumption to verify:** the Kraken track's end-of-round damage is taken as 1, 2, 3, 4, 5 then Dead (`DEFAULT_KRAKEN_TRACK` in `lib/game/simulate.ts`). If the board says otherwise, change that constant and update `OFFICIAL_WIN_RATES` from the test output.
 
 ## Profanity filter
 
@@ -172,7 +200,9 @@ lib/
   board.ts                 board geometry and movement
   tokens.ts                token inventory
   scenario.ts              layout model, editing rules, parsing, share links
-  analysis.ts              route finding and checks
+  analysis.ts              course check: placement, best case, dead ends
+  difficulty.ts            difficulty estimate (+ difficultyScale.ts, difficulty.worker.ts)
+  game/                    rules engine: cards, geometry, best-case search, simulation
   official.ts              the six printed scenarios
   profanity.ts             profanity filter (engine)
   profanity-data.ts        profanity filter (word data)

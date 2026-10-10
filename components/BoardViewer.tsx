@@ -9,12 +9,14 @@ export default function BoardViewer({
   id,
   layout,
   route,
+  routeRounds,
   traps,
   label,
 }: {
   id?: string;
   layout: Layout;
   route?: string[] | null;
+  routeRounds?: number[] | null;
   traps?: string[];
   label: string;
 }) {
@@ -22,7 +24,7 @@ export default function BoardViewer({
   return (
     <div id={id} className={`board-frame board-frame--view${orientation === "vertical" ? " board-frame--vertical" : ""}`}>
       {orientation ? (
-        <BoardSvg layout={layout} orientation={orientation} route={route} traps={traps} label={label} />
+        <BoardSvg layout={layout} orientation={orientation} route={route} routeRounds={routeRounds} traps={traps} label={label} />
       ) : (
         <div className="board-placeholder" aria-hidden="true" />
       )}

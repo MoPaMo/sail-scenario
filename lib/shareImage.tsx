@@ -96,6 +96,8 @@ export async function scenarioShareImage(s: {
   layout: Layout;
   columns: number;
   host: string;
+  /** Difficulty label and colour, when known. */
+  level?: { label: string; color: string };
 }): Promise<ImageResponse> {
   const fonts = await loadFonts();
   const size = titleSize(s.title);
@@ -123,6 +125,21 @@ export async function scenarioShareImage(s: {
           <Stat icon={ICONS.kraken} value={s.layout.kraken.length} />
           <Stat icon={ICONS.storm} value={s.layout.storms.length} w={36} h={28} />
           <div style={{ display: "flex", color: COLORS.dim }}>{`${s.columns} columns`}</div>
+          {s.level && (
+            <div
+              style={{
+                display: "flex",
+                padding: "4px 16px 6px",
+                borderRadius: 999,
+                background: s.level.color,
+                color: COLORS.deep,
+                fontWeight: 700,
+                fontSize: 28,
+              }}
+            >
+              {s.level.label}
+            </div>
+          )}
         </div>
         <Board layout={s.layout} />
       </div>

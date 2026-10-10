@@ -140,6 +140,24 @@ test("analysis catches unreachable ends, misplaced storms and dead ends", () => 
   assert.ok(p.traps.includes("B5"), `expected B5 among ${p.traps.join(",")}`);
 });
 
+test("analysis: storm warnings follow the round model", () => {
+  // Ideal cards on open sea: 7 moves a round (6 helm + 1 fish) = 8 columns, so column 17 after round 2.
+  const storm = (col: number) => analyze({ ...emptyLayout(), end: "D25", storms: [col] });
+  const ok16 = storm(16);
+  assert.ok(ok16.checks.some((c) => c.severity === "ok" && c.text.includes("column 16")));
+  // Column 17 needs pirate 4's 8th trick (9 columns a round).
+  const p4 = storm(17);
+  assert.ok(p4.checks.some((c) => c.severity === "warning" && c.text.includes("pirate 4")), p4.checks.map((c) => c.text).join(" / "));
+  // Column 19: not even with pirate 4; only luck or straight-moving pirates. Still publishable.
+  const luck = storm(19);
+  assert.ok(luck.checks.some((c) => c.severity === "warning" && c.text.includes("even with ideal cards")));
+  assert.equal(luck.canPublish, true);
+
+  const easy = analyze({ ...emptyLayout(), end: "D11", storms: [5] });
+  assert.equal(easy.best?.round, 2);
+  assert.ok(easy.route && easy.route.moveRounds.every((r, i, a) => i === 0 || r >= a[i - 1]));
+});
+
 test("storm deadlines: first by round 2, second by round 4", () => {
   const l = { ...emptyLayout(), end: "D25", storms: [9, 18] };
   const a = analyze(l);

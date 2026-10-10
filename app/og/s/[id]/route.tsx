@@ -1,3 +1,4 @@
+import { difficultyLevel, type DifficultyLevel } from "@/lib/difficultyScale";
 import { siteUrl } from "@/lib/email";
 import { scenarioShareImage } from "@/lib/shareImage";
 import { getStore, ID_RE } from "@/lib/store";
@@ -18,5 +19,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     layout: rec.layout,
     columns: rec.stats.columns,
     host: new URL(siteUrl()).host,
+    level: typeof rec.stats.winRate === "number" ? levelBadge(rec.stats.winRate) : undefined,
   });
+}
+
+const LEVEL_COLORS: Record<DifficultyLevel, string> = {
+  easy: "#8ee0a8",
+  medium: "#c6e8cc",
+  hard: "#f3d446",
+  "very-hard": "#f39a46",
+  brutal: "#ff8a73",
+  impossible: "#ff8a73",
+};
+
+function levelBadge(winRate: number) {
+  const { level, label } = difficultyLevel(winRate);
+  return { label, color: LEVEL_COLORS[level] };
 }

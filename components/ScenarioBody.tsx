@@ -6,6 +6,8 @@ import type { Analysis } from "@/lib/analysis";
 import type { Layout } from "@/lib/scenario";
 import BoardViewer from "./BoardViewer";
 import { CourseDetails } from "./CourseCheck";
+import Difficulty from "./Difficulty";
+import { useDifficulty } from "./useDifficulty";
 import LegendCard from "./LegendCard";
 import { CopyLinkButton, PrintButton } from "./ShareButtons";
 
@@ -29,13 +31,15 @@ export default function ScenarioBody({
 }) {
   const [revealed, setRevealed] = useState(false);
   const traps = analysis.traps;
+  const difficulty = useDifficulty(layout, analysis.reachable, 0);
 
   return (
     <>
       <BoardViewer
         id="map"
         layout={layout}
-        route={revealed ? (analysis.safest?.cells ?? null) : null}
+        route={revealed ? (analysis.route?.cells ?? null) : null}
+        routeRounds={revealed ? (analysis.route?.moveRounds ?? null) : null}
         traps={revealed ? traps : []}
         label={revealed ? `Map of ${title}, with the best route drawn in` : `Map of ${title}`}
       />
@@ -51,6 +55,11 @@ export default function ScenarioBody({
 
       <div className="sheet">
         <LegendCard layout={layout} title={title} />
+        <div className="side">
+        <section className="difficulty-panel" aria-labelledby="difficulty-heading">
+          <h2 id="difficulty-heading">Difficulty</h2>
+          <Difficulty state={difficulty} showLosses={false} />
+        </section>
         <section className={`tips${revealed ? " tips--open" : ""}`} aria-labelledby="tips-heading">
           <div className="tips-head">
             <h2 id="tips-heading">Tips</h2>
@@ -66,8 +75,7 @@ export default function ScenarioBody({
           </div>
           {!revealed && (
             <p className="tips-cover">
-              Contains spoilers: the best route on the map, dead-end spaces, and how many moves the course takes. Try the
-              scenario first.
+              Contains spoilers: the best route on the map with where each round ends, dead-end spaces, and why simulated crews lost. Try the scenario first.
             </p>
           )}
           <div id="tips-content" hidden={!revealed}>
@@ -77,11 +85,12 @@ export default function ScenarioBody({
                   The best route is now drawn on the map
                   {traps.length > 0 ? ", and dead-end spaces are hatched" : ""}. <a href="#map">Back to the map</a>
                 </p>
-                <CourseDetails analysis={analysis} />
+                <CourseDetails analysis={analysis} difficulty={difficulty} showDifficulty={false} />
               </>
             )}
           </div>
         </section>
+        </div>
       </div>
     </>
   );
