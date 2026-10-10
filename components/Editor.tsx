@@ -269,8 +269,9 @@ export default function Editor({ config, edit }: { config: PublishConfig; edit?:
     const keys = {
       forward: h ? "ArrowRight" : "ArrowDown",
       back: h ? "ArrowLeft" : "ArrowUp",
-      top: h ? "ArrowUp" : "ArrowLeft",
-      bottom: h ? "ArrowDown" : "ArrowRight",
+      // Upright, row A is on the right.
+      top: h ? "ArrowUp" : "ArrowRight",
+      bottom: h ? "ArrowDown" : "ArrowLeft",
     };
     let candidates: [number, number][] = [];
     if (e.key === keys.forward) candidates = [[r, c + 2], [r - 1, c + 1], [r + 1, c + 1]];

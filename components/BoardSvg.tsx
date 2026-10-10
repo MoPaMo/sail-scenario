@@ -45,10 +45,12 @@ type Pt = [number, number];
 
 function makeGeometry(orientation: Orientation, compact: boolean) {
   const padAcross = compact ? 26 : 46;
+  // Upright = the printed board turned a quarter clockwise: Start at the top, row A on the right.
+  // (Turn the phone back to landscape and row A is on top again, as in the scenario book.)
   const p = (along: number, across: number): Pt =>
     orientation === "horizontal"
       ? [PAD_ALONG + along * W, padAcross + across * H]
-      : [padAcross + across * H, PAD_ALONG + along * W];
+      : [padAcross + (ACROSS_UNITS - across) * H, PAD_ALONG + along * W];
   const width = orientation === "horizontal" ? 2 * PAD_ALONG + ALONG_UNITS * W : 2 * padAcross + ACROSS_UNITS * H;
   const height = orientation === "horizontal" ? 2 * padAcross + ACROSS_UNITS * H : 2 * PAD_ALONG + ALONG_UNITS * W;
   return { p, width, height };
